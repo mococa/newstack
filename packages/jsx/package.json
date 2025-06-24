@@ -1,0 +1,7 @@
+{
+  "name": "@newstack/jsx",
+  "private": true,
+  "version": "0.0.1",
+  "license": "MIT",
+  "main": "src/jsx-shim.js"
+}

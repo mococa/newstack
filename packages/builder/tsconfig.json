@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json", 
+  "compilerOptions": {
+    "lib": [ "es2017", "DOM" ],
+    "strict": false,
+    "noImplicitAny": false,
+    "jsx": "preserve",
+    "skipLibCheck": true,
+    "downlevelIteration": true,
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "typeRoots": ["./node_modules/@types", "./src/@types", "../../node_modules/@types"],
+  },
+  "exclude": ["node_modules"]
+}
