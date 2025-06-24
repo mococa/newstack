@@ -1,8 +1,8 @@
 /* ---------- Internal ---------- */
+import { randomUUID } from "crypto";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { readFile } from "fs/promises";
-import { randomUUID } from "crypto";
 
 /* ---------- External ---------- */
 import { serve } from "@hono/node-server";
@@ -11,10 +11,11 @@ import { Hono } from "hono/tiny";
 /* ---------- Framework ---------- */
 import type {
   Newstack,
-  NewstackServerContext,
   NewstackClientContext,
+  NewstackServerContext,
 } from "./core";
 import { Renderer } from "./renderer";
+import { proxifyContext } from "./context";
 
 /* ---------- Constants ---------- */
 const __filename = fileURLToPath(import.meta.url);
@@ -44,9 +45,12 @@ const mimeTypes: Record<string, string> = {
   ".eot": "application/vnd.ms-fontobject",
 };
 
-const context = {
+const context = proxifyContext({
   environment: "server",
-} as NewstackServerContext | NewstackClientContext;
+  params: {},
+  page: {} as NewstackClientContext["page"],
+  router: {} as NewstackClientContext["router"],
+}) as NewstackServerContext & NewstackClientContext;
 
 const loaders = {
   client: async () => {
@@ -66,7 +70,7 @@ loaders.client();
  * The server handles server-side rendering of Newstack components and provides
  * a way to execute server functions defined in the components.
  */
-class NewstackServer {
+export class NewstackServer {
   /**
    * @description
    * The Hono application instance that serves the Newstack server.
@@ -85,8 +89,7 @@ class NewstackServer {
    */
   renderer: Renderer;
 
-  constructor(app: Newstack<unknown>) {
-    this.app = app;
+  constructor() {
     this.server = new Hono();
 
     this.renderer = new Renderer(context as NewstackClientContext);
@@ -135,7 +138,8 @@ class NewstackServer {
    * @returns {Promise<string>} - The content of the file as a string.
    */
   private async handleFile(name: string): Promise<string> {
-    if (name === "favicon.ico") {
+    const dynamic = ["favico.ico", "style.css"].includes(name);
+    if (dynamic) {
       return "";
     }
 
@@ -171,25 +175,66 @@ class NewstackServer {
         return c.body(files.get("client"));
       })
       .get("*", async (c) => {
+        const { path } = c.req;
         // Handle files
-        if (c.req.path.includes(".")) {
-          const result = await this.handleFile(c.req.path.slice(1));
+        if (path.includes(".")) {
+          const result = await this.handleFile(path.slice(1));
           if (!result) return c.notFound();
 
-          const end = c.req.path.split(".").pop() || "";
+          const end = path.split(".").pop() || "";
           c.header("Content-Type", mimeTypes[`.${end}`] || "text/plain");
 
           return c.body(result);
         }
 
         this.renderer.components.clear(); // Clear components for each request
-        context.path = c.req.path;
-        const element = this.app.render(context as NewstackClientContext);
-        const page = this.renderer.html(element);
-        this.prepare();
+        this.renderer.components.add(this.app);
+        context.path = path;
+        context.router.path = path;
+        const page = this.template();
 
-        return c.html(template(page));
+        return c.html(page);
       });
+  }
+
+  /**
+   * @description
+   * Generates the HTML template for the initial page.
+   * It renders the application and prepares the components for server-side rendering.
+   *
+   * @returns {string} - The HTML template as a string.
+   */
+  private template(): string {
+    const element = this.app.render(context as NewstackClientContext);
+    const page = this.renderer.html(element);
+    this.prepare();
+
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+            <title>${context.page.title}</title>
+            <meta name="og:title" content="${context.page.title}">
+
+            <meta name="description" content="${context.page.description || ""}">
+            <meta name="og:description" content="${context.page.description || ""}">
+
+            <style>
+      	      body { font-family: Arial, sans-serif; }
+            </style>
+
+      	    <script type="module" src="/client.js?fingerprint=${hash}"></script>
+        </head>
+
+        <body>
+          <div id="app">
+              ${page}
+          </div>
+        </body>
+      </html>`;
   }
 
   /**
@@ -198,44 +243,15 @@ class NewstackServer {
    *
    * @returns {Hono}
    */
-  serve(): Hono {
+  start(app: Newstack): Hono {
+    this.app = app;
+
     serve(this.server, ({ port }) => {
       console.log(`Newstack server is running on http://localhost:${port} 🚀`);
     });
 
     return this.server;
   }
-}
-
-/* ---------- Functions ---------- */
-function template(page: string) {
-  return `
-<!DOCTYPE html>
-<html>
-  <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Newstack App</title>
-
-      <style>
-	  body { font-family: Arial, sans-serif; }
-      </style>
-	  <script defer async type="module" src="/client.js?hash=${hash}"></script>
-  </head>
-
-  <body>
-    <div id="app">
-        ${page}
-    </div>
-
-  </body>
-</html>
-`;
-}
-
-export function startServer(app: Newstack<unknown>) {
-  const server = new NewstackServer(app);
-  server.serve();
 }
 
 /* ---------- Types ---------- */

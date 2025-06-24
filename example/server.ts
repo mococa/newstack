@@ -1,5 +1,5 @@
 import { ApplicationExample } from "./src/Application";
-import { startServer } from "@newstack/framework/server";
+import { NewstackServer } from "@newstack/framework/server";
 
 const app = new ApplicationExample();
-startServer(app);
+new NewstackServer().start(app);

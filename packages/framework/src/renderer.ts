@@ -1,4 +1,8 @@
-import { type NewstackClientContext, Newstack } from "./core";
+import {
+  Newstack,
+  type NewstackClientContext,
+  type NewstackServerContext,
+} from "./core";
 
 type VNode = {
   type: string | Function;
@@ -57,8 +61,11 @@ export class Renderer {
     const { type, props } = node;
 
     // Skip rendering if the route does not match
-    if (props.route && props.route !== this.context.path) {
-      return "";
+    if (props.route) {
+      const matchAll = props.route === "*";
+      const matchPath = matchRoute(props.route, this.context);
+
+      if (!matchAll && !matchPath) return "";
     }
 
     // Rendering Newstack components
@@ -259,4 +266,32 @@ function patchElement(
       oldEl.replaceChild(newChild.cloneNode(true), oldChild);
     }
   }
+}
+
+function matchRoute(
+  routePattern: string,
+  context: NewstackClientContext,
+): boolean {
+  const routeSegments = routePattern.split("/").filter(Boolean);
+  const pathSegments = context.router.path.split("/").filter(Boolean);
+
+  if (routeSegments.length !== pathSegments.length) return false;
+
+  for (let i = 0; i < routeSegments.length; i++) {
+    const routeSegment = routeSegments[i];
+    const pathSegment = pathSegments[i];
+
+    if (routeSegment.startsWith(":")) {
+      continue; // param match
+    }
+    if (routeSegment !== pathSegment) return false;
+  }
+
+  routeSegments.forEach((segment, index) => {
+    if (!segment.startsWith(":")) return;
+    const paramName = segment.slice(1);
+    context.params[paramName] = pathSegments[index];
+  });
+
+  return true;
 }

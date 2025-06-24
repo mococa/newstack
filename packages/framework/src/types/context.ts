@@ -79,6 +79,7 @@ export type NewstackClientContext<T = unknown> = NewstackCommonContext & {
    * Query parameters from the URL
    */
   params: NewstackParams;
+
   worker?: NewstackWorker;
   // instances?: NewstackInstances;
   /**

@@ -1,4 +1,4 @@
-import Newstack from "@newstack/framework";
+import Newstack, { type NewstackClientContext } from "@newstack/framework";
 import type { Socket } from "socket.io-client";
 
 class Counter extends Newstack {
@@ -17,8 +17,8 @@ class Counter extends Newstack {
   }
 
   async hydrate() {
-    const { io } = await import("socket.io-client");
-    this.io = io("");
+    // const { io } = await import("socket.io-client");
+    // this.io = io("");
     this.count = 0;
 
     this.interval = setInterval(() => {
@@ -28,7 +28,7 @@ class Counter extends Newstack {
 
   destroy() {
     clearInterval(this.interval);
-    this.io.disconnect();
+    this.io?.disconnect();
   }
 
   /**
@@ -190,28 +190,87 @@ export class ApplicationExample extends Newstack {
   render() {
     return (
       <main>
-        <div route="/">
-          <h1>Welcome to Newstack! </h1>
-          <p>This is a simple example of a Newstack application.</p>
-
-          <Counter />
-          <ChangeString />
-          <ManualCounter />
-          <InputShow />
-          <List />
-          <SayHello />
-
-          <a href="/about">About</a>
-        </div>
-
-        <div route="/about">
-          <h1>About Newstack</h1>
-
-          <p>Newstack is a modern framework for building web applications.</p>
-
-          <a href="/">Home</a>
-        </div>
+        <Home route="/" />
+        <About route="/about" />
+        <Profile route="/profile/:id" />
       </main>
+    );
+  }
+}
+
+class Profile extends Newstack {
+  prepare({ page, params }: NewstackClientContext) {
+    page.title = "Profile Page";
+    page.description = "User profile information.";
+  }
+
+  render({ params }: NewstackClientContext) {
+    return (
+      <div>
+        <h1>Profile Page</h1>
+        <p>This is the user profile page. id: {params.id}</p>
+        <a href="/">Home</a>
+      </div>
+    );
+  }
+}
+
+class Home extends Newstack {
+  prepare({ page }: NewstackClientContext) {
+    page.title = "Newstack Example Application";
+    page.description = "A simple example of a Newstack application.";
+  }
+
+  render({ router }: NewstackClientContext) {
+    return (
+      <div>
+        <h1>Welcome to Newstack! </h1>
+        <p>This is a simple example of a Newstack application.</p>
+
+        <Counter />
+        <ChangeString />
+        <ManualCounter />
+        <InputShow />
+        <List />
+        <SayHello />
+
+        <a href="/about">About</a>
+
+        <button
+          type="button"
+          onclick={() => {
+            console.log("Navigating to /about");
+            router.path = "/about";
+          }}
+        >
+          Go to about
+        </button>
+
+        <button
+          type="button"
+          onclick={() => {
+            router.path = "/profile/1";
+          }}
+        >
+          Go to profile 1
+        </button>
+      </div>
+    );
+  }
+}
+class About extends Newstack {
+  prepare({ page }: NewstackClientContext) {
+    page.title = "About Newstack";
+    page.description = "Learn more about Newstack and its features.";
+  }
+
+  render() {
+    return (
+      <div>
+        <h1>About Newstack</h1>
+        <p>Newstack is a modern framework for building web applications.</p>
+        <a href="/">Home</a>
+      </div>
     );
   }
 }
