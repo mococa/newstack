@@ -10,25 +10,25 @@ A framework **extremely** similar to [Nullstack](https://nullstack.app/), but us
 
 # Roadmap
 - [x] Server-side rendering
-- [-] Client-side rendering
+- [ ] Client-side rendering
   - [x] Hydration
   - [x] Navigation
   - [x] Destruction 
   - [x] Reactivity with proxies
-  - [] Two-way data binding 
+  - [ ] Two-way data binding 
 - [x] Components with JSX (no react)
 - [x] Public folder for assets
-- [] Server functions
-- [] Option to build for Node and Bun
-- [] Biome integration
-- [] Tests
-- [] CLI to create new projects
-- [-] Context
+- [ ] Server functions
+- [ ] Option to build for Node and Bun
+- [ ] Biome integration
+- [ ] Tests
+- [ ] CLI to create new projects
+- [ ] Context
   - [x] (Server) Environment
   - [x] (Client) Current route
   - [x] (Client) Environment
   - [ ] (Server) Secrets
-  - [ ] (Client) Page
-  - [ ] (Client) Params
-  - [ ] (Client) Router
+  - [x] (Client) Page
+  - [x] (Client) Params
+  - [x] (Client) Router
   - [ ] (Client) Settings
