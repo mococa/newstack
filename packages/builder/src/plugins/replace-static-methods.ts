@@ -1,5 +1,12 @@
 import type { OnLoadArgs } from "esbuild";
 
+const regexes = {
+  class: /class\s+(\w+)\s+extends\s+Newstack\s*{([\s\S]*?)^}/gm,
+  hash: /static\s+hash\s*=\s*["'`](.+?)["'`]/,
+  method:
+    /^(\s*)static\s+async\s+(\w+)\s*\(\s*(\w+|\{\s*\w+(?:\s*,\s*\w+)*\s*\})?\s*\)\s*\{([\s\S]*?)^\1}/gm,
+};
+
 /**
  * @kind Client
  *
@@ -11,38 +18,18 @@ import type { OnLoadArgs } from "esbuild";
  * @returns {string} Updated code
  */
 export function ReplaceStaticMethods(args: OnLoadArgs, code: string): string {
-  const classRegex = /class\s+(\w+)\s+extends\s+Newstack\s*{([\s\S]*?)}/g;
-  const hashRegex = /static\s+hash\s*=\s*["'`](.+?)["'`]/;
-  const methodRegex = /static\s+(async\s+)?(\w+)\s*\((.*?)\)\s*\{([\s\S]*?)\}/g;
-
   let updated = code;
 
-  [...updated.matchAll(classRegex)].forEach(([fullClass, className, body]) => {
-    const hashMatch = fullClass.match(hashRegex);
-    if (!hashMatch) return;
+  for (const [_, className, body] of code.matchAll(regexes.class)) {
+    const hash = body.match(regexes.hash)?.[1];
+    if (!hash) continue;
 
-    const hash = hashMatch[1];
+    for (const [method, _, name, params] of body.matchAll(regexes.method)) {
+      const newMethod = `static async ${name}(${params}) { ${replacer({ args: [params], method: name, hash })} }`;
 
-    [...fullClass.matchAll(methodRegex)].forEach(
-      ([fullMethod, asyncKeyword, methodName, paramStr]) => {
-        const args = paramStr
-          .split(",")
-          .map((p) => p.trim().split("=")[0].trim())
-          .filter(Boolean)
-          .join(", ");
-
-        const newMethod = `static ${asyncKeyword || ""}${methodName}(${paramStr}) {${replacer(
-          {
-            method: methodName,
-            hash,
-            args: `[${args}]`,
-          },
-        )}}`;
-
-        updated = updated.replace(fullMethod, newMethod);
-      },
-    );
-  });
+      updated = updated.replace(method, newMethod);
+    }
+  }
 
   return updated;
 }
@@ -56,7 +43,9 @@ function replacer({ args, method, hash }) {
             body: JSON.stringify(${args}),
         };
 
-        const result = await fetch(url, options).then((res) => res.json());
+        const { result, error } = await fetch(url, options).then((res) => res.json());
+        if (error) throw new Error(error);
+
         return result;
     `;
 }

@@ -45,6 +45,26 @@ export class Renderer {
 
   /**
    * @description
+   * Finds a Newstack component by its static hash property.
+   * This function iterates through the components map and checks if the
+   * component's constructor has a matching hash. If found, it returns the component.
+   *
+   * @param hash The hash of the component to find.
+   * @returns The Newstack component if found, otherwise null.
+   */
+  findComponentByHash(hash: string): Newstack {
+    for (const c of this.components.keys()) {
+      const component = c.constructor as typeof Newstack<{ hash: string }>;
+      if (!component) continue;
+
+      if (component.hash === hash) return c;
+    }
+
+    return null;
+  }
+
+  /**
+   * @description
    * Renders a Newstack component tree to HTML.
    * This function recursively traverses the component tree, converting each component
    * and its properties into an HTML string. It handles both standard HTML elements

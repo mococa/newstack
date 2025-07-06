@@ -125,9 +125,21 @@ export class NewstackServer {
     method: string,
     args: unknown,
   ): Promise<ServerFunctionResponse> {
-    // TODO: Implement server function handling
+    const component = this.renderer.findComponentByHash(hash);
+    if (!component) {
+      return { result: null, error: `Component with hash ${hash} not found` };
+    }
 
-    return { result: {}, error: null };
+    try {
+      const result = await component.constructor[method](args);
+
+      return { result, error: null };
+    } catch (error) {
+      return {
+        result: null,
+        error: error instanceof Error ? error.message : "Unknown server error",
+      };
+    }
   }
 
   /**
