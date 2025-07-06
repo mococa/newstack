@@ -28,7 +28,7 @@ export class Renderer {
    * A set of components that have been rendered or are being rendered.
    * This is used to keep track of components for hydration and other purposes.
    */
-  components: Set<Newstack>;
+  components: Map<Newstack, { visible: boolean }>;
 
   /**
    * @description
@@ -39,7 +39,7 @@ export class Renderer {
 
   constructor(context: NewstackClientContext = {} as NewstackClientContext) {
     this.context = context;
-    this.components = new Set();
+    this.components = new Map();
     this.componentElements = new Map();
   }
 
@@ -61,7 +61,7 @@ export class Renderer {
     const { type, props } = node;
 
     // Skip rendering if the route does not match
-    if (props.route) {
+    if (props?.route) {
       const matchAll = props.route === "*";
       const matchPath = matchRoute(props.route, this.context);
 
@@ -73,7 +73,7 @@ export class Renderer {
       type && typeof type === "function" && type.prototype instanceof Newstack;
     if (isComponent) {
       const component = proxify(new (type as any)(), this);
-      this.components.add(component);
+      this.components.set(component, { visible: true });
 
       const isRenderable = typeof component.render === "function";
       if (isRenderable) {
