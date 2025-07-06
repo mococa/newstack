@@ -4,6 +4,8 @@ import {
   NewstackComponent,
 } from "./types/context";
 
+type VoidOrPromise = void | Promise<void>;
+
 export { NewstackClientContext, NewstackServerContext } from "./types/context";
 
 /**
@@ -43,13 +45,15 @@ export abstract class Newstack<T = {}> extends NewstackComponent<T> {
   }
 
   /** Method automatically ran in the server when this is being served for the first time and automatically ran in the client before the HTML is rendered in the DOM */
-  prepare?(context?: NewstackClientContext<T> | NewstackServerContext<T>): void;
+  prepare?(
+    context?: NewstackClientContext<T> | NewstackServerContext<T>,
+  ): VoidOrPromise;
   /** Method automatically ran in the client right after the HTML is rendered in the DOM. */
-  hydrate?(context?: NewstackClientContext<T>): void;
+  hydrate?(context?: NewstackClientContext<T>): VoidOrPromise;
   /** Method automatically ran in the client when the component or children reactivity are updated. */
-  update?(context?: NewstackClientContext<T>): void;
+  update?(context?: NewstackClientContext<T>): VoidOrPromise;
   /** Method automatically ran in the client when the component is no longer in the DOM. */
-  destroy?(context?: NewstackClientContext<T>): void;
+  destroy?(context?: NewstackClientContext<T>): VoidOrPromise;
   /** Method automatically ran in the client for reactivity and ran once in the server for first-page-view SSR. */
   render?(context?: NewstackClientContext<T>): any;
 }
