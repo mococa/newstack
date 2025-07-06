@@ -15,10 +15,13 @@ A framework **extremely** similar to [Nullstack](https://nullstack.app/), but us
   - [x] Navigation
   - [x] Destruction 
   - [x] Reactivity with proxies
+  - [x] Bundle splitting with dynamic imports
   - [ ] Two-way data binding 
 - [x] Components with JSX (no react)
 - [x] Public folder for assets
 - [ ] Server functions
+  - [x] Basic execution
+  - [ ] Context aware executions
 - [ ] Option to build for Node and Bun
 - [ ] Biome integration
 - [ ] Tests
