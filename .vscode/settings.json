@@ -11,7 +11,7 @@
     "*.tsx": "${capture}.ts",
     "*.json": "${capture}.png",
     "tsconfig.json": "tsconfig.*.json",
-    "package.json": "package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lock*, tsconfig*.json, .vscode/*, biome.json",
+    "package.json": "package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lock*, tsconfig*.json, .vscode/*, biome.json, esbuild.config.*",
     "tailwind.config.*": "tailwind.css",
     "Dockerfile*": "docker-compose.yml"
   },
