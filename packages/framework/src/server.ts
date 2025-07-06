@@ -100,10 +100,12 @@ export class NewstackServer {
    * @description
    * Prepares the components for rendering in the server-side.
    */
-  private prepare() {
-    this.renderer.components.forEach((component) => {
-      component.prepare?.(context);
-    });
+  private async prepare() {
+    for (const [component, { visible }] of this.renderer.components) {
+      if (!visible) continue;
+
+      await component.prepare?.(context);
+    }
   }
 
   /**
@@ -187,11 +189,14 @@ export class NewstackServer {
           return c.body(result);
         }
 
-        this.renderer.components.clear(); // Clear components for each request
-        this.renderer.components.add(this.app);
+        this.renderer.components.forEach((_, component) => {
+          this.renderer.components.set(component, { visible: false });
+        });
+
+        this.renderer.components.set(this.app, { visible: true });
         context.path = path;
         context.router.path = path;
-        const page = this.template();
+        const page = await this.template();
 
         return c.html(page);
       });
@@ -202,12 +207,12 @@ export class NewstackServer {
    * Generates the HTML template for the initial page.
    * It renders the application and prepares the components for server-side rendering.
    *
-   * @returns {string} - The HTML template as a string.
+   * @returns {Promise<string>} - The HTML template as a string.
    */
-  private template(): string {
+  private async template(): Promise<string> {
     const element = this.app.render(context as NewstackClientContext);
     const page = this.renderer.html(element);
-    this.prepare();
+    await this.prepare();
 
     return `
       <!DOCTYPE html>
