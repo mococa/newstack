@@ -41,16 +41,24 @@ export class NewstackClient {
       throw new Error("Root element with id 'app' not found.");
     }
 
+    const description = document.querySelector("meta[name='description']");
+
+    const page = {
+      title: document.title,
+      description: description?.getAttribute("content") || "",
+      locale: document.documentElement.lang,
+    } as NewstackClientContext["page"];
+
+    const router = {
+      url: location.href,
+      path: location.pathname,
+      base: location.origin,
+    } as NewstackClientContext["router"];
+
     const ctx: Partial<NewstackClientContext> = {
       environment: "client",
-      page: {
-        title: document.title,
-      } as NewstackClientContext["page"],
-      router: {
-        url: location.href,
-        path: location.pathname,
-        base: location.origin,
-      } as NewstackClientContext["router"],
+      page,
+      router,
       params: {},
     };
 
@@ -83,8 +91,7 @@ export class NewstackClient {
    */
   renderRoute(href: string) {
     this.context.path = href;
-    this.renderer.components.forEach((c) => c.destroy?.(this.context));
-    this.renderer.components.clear();
+    this.destroyVisibleComponents();
 
     this.app.prepare?.(this.context);
     const html = this.app.render?.(this.context) || {};
@@ -96,7 +103,8 @@ export class NewstackClient {
 
     this.patchLinks();
 
-    this.renderer.components.forEach((component) => {
+    this.renderer.components.forEach(({ visible }, component) => {
+      if (!visible) return;
       component.prepare?.(this.context);
       component.hydrate?.(this.context);
     });
@@ -138,7 +146,8 @@ export class NewstackClient {
    *
    */
   private assignElements() {
-    this.renderer.components.forEach((component) => {
+    this.renderer.components.forEach(({ visible }, component) => {
+      if (!visible) return;
       const { hash } = component.constructor as unknown as { hash: string };
       const element = this.root.querySelector(`[data-newstack="${hash}"]`);
       if (!element) return;
@@ -147,6 +156,22 @@ export class NewstackClient {
 
       this.renderer.componentElements.set(hash, element);
       this.renderer.updateComponent(component);
+    });
+  }
+
+  /**
+   * @description
+   * Destroys all visible components in the renderer and set them as invisible.
+   * This function iterates through the components map and calls the destroy method
+   * on each component that is currently visible. It then marks the component as not visible.
+   * This is used when changing routes.
+   */
+  private destroyVisibleComponents() {
+    this.renderer.components.forEach(({ visible }, component) => {
+      if (!visible) return;
+
+      component.destroy?.(this.context);
+      this.renderer.components.get(component).visible = false;
     });
   }
 }
