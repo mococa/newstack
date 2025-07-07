@@ -27,8 +27,6 @@ export abstract class Newstack<T = {}> extends NewstackComponent<T> {
     // biome-ignore lint/correctness/noConstructorReturn: <explanation>
     return new Proxy(this, {
       get: (target, prop) => {
-        // if (prop === '__node') return target.__node;
-        // if (prop === '__hash') return target.__hash;
         if (prop === "constructor") return target.constructor;
 
         // If the property is not found, return undefined
