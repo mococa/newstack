@@ -87,7 +87,7 @@ export class NewstackServer {
    * @description
    * The renderer instance that handles rendering Newstack components to HTML.
    */
-  renderer: Renderer;
+  private renderer: Renderer;
 
   constructor() {
     this.server = new Hono();
@@ -101,8 +101,8 @@ export class NewstackServer {
    * Prepares the components for rendering in the server-side.
    */
   private async prepare() {
-    for (const [component, { visible }] of this.renderer.components) {
-      if (!visible) continue;
+    for (const [hash, { component }] of this.renderer.components) {
+      if (!this.renderer.visibleHashes.has(hash)) continue;
 
       await component.prepare?.(context);
     }
@@ -186,32 +186,40 @@ export class NewstackServer {
       .get("/client.js", (c) => {
         c.header("Content-Type", "application/javascript");
         c.header("Cache-Control", "public, max-age=87600, immutable");
+        c.header("X-Newstack-Fingerprint", hash);
+
         return c.body(files.get("client"));
-      })
-      .get("*", async (c) => {
-        const { path } = c.req;
-        // Handle files
-        if (path.includes(".")) {
-          const result = await this.handleFile(path.slice(1));
-          if (!result) return c.notFound();
-
-          const end = path.split(".").pop() || "";
-          c.header("Content-Type", mimeTypes[`.${end}`] || "text/plain");
-
-          return c.body(result);
-        }
-
-        this.renderer.components.forEach((_, component) => {
-          this.renderer.components.set(component, { visible: false });
-        });
-
-        this.renderer.components.set(this.app, { visible: true });
-        context.path = path;
-        context.router.path = path;
-        const page = await this.template();
-
-        return c.html(page);
       });
+  }
+
+  /**
+   * @description
+   * Serves the application by handling all incoming requests.
+   * It serves static files and renders the initial HTML page for the application.
+   */
+  private serveAppRoutes() {
+    this.server.get("*", async (c) => {
+      c.header("X-Newstack-Fingerprint", hash);
+      c.header("Content-Encoding", "application/gzip");
+
+      const { path } = c.req;
+      // Handle files
+      if (path.includes(".")) {
+        const result = await this.handleFile(path.slice(1));
+        if (!result) return c.notFound();
+
+        const end = path.split(".").pop() || "";
+        c.header("Content-Type", mimeTypes[`.${end}`] || "text/plain");
+
+        return c.body(result);
+      }
+
+      context.path = path;
+      context.router.path = path;
+      const page = await this.template();
+
+      return c.html(page);
+    });
   }
 
   /**
@@ -222,13 +230,14 @@ export class NewstackServer {
    * @returns {Promise<string>} - The HTML template as a string.
    */
   private async template(): Promise<string> {
+    this.renderer.visibleHashes.clear();
     const element = this.app.render(context as NewstackClientContext);
     const page = this.renderer.html(element);
     await this.prepare();
 
     return `
       <!DOCTYPE html>
-      <html>
+      <html lang="${context.page.locale || "en"}">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -262,6 +271,8 @@ export class NewstackServer {
    */
   start(app: Newstack): Hono {
     this.app = app;
+    this.serveAppRoutes();
+    this.renderer.setupAllComponents(this.app);
 
     serve(this.server, ({ port }) => {
       console.log(`Newstack server is running on http://localhost:${port} 🚀`);

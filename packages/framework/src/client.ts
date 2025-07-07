@@ -77,8 +77,11 @@ export class NewstackClient {
    */
   start(app: Newstack) {
     this.app = app;
+    this.renderer.setupAllComponents(this.app);
 
+    this.app.prepare?.(this.context);
     this.renderRoute(location.pathname);
+    this.app.hydrate?.(this.context);
   }
 
   /**
@@ -91,23 +94,21 @@ export class NewstackClient {
    */
   renderRoute(href: string) {
     this.context.path = href;
-    this.destroyVisibleComponents();
+    this.destroyComponents();
 
-    this.app.prepare?.(this.context);
     const html = this.app.render?.(this.context) || {};
+    if (!html) {
+      console.error("No HTML returned from the application render method.");
+      return;
+    }
 
-    this.root.innerHTML = this.renderer.html(html);
+    this.renderer.patchRoute(html, this.root);
+
     this.assignElements();
-
-    this.app.hydrate?.(this.context);
 
     this.patchLinks();
 
-    this.renderer.components.forEach(({ visible }, component) => {
-      if (!visible) return;
-      component.prepare?.(this.context);
-      component.hydrate?.(this.context);
-    });
+    this.startComponents();
   }
 
   /**
@@ -146,17 +147,16 @@ export class NewstackClient {
    *
    */
   private assignElements() {
-    this.renderer.components.forEach(({ visible }, component) => {
-      if (!visible) return;
+    const components = this.routeComponents();
+    for (const component of components) {
       const { hash } = component.constructor as unknown as { hash: string };
       const element = this.root.querySelector(`[data-newstack="${hash}"]`);
-      if (!element) return;
+      if (!element) continue;
 
       element.removeAttribute("data-newstack");
-
       this.renderer.componentElements.set(hash, element);
       this.renderer.updateComponent(component);
-    });
+    }
   }
 
   /**
@@ -166,12 +166,54 @@ export class NewstackClient {
    * on each component that is currently visible. It then marks the component as not visible.
    * This is used when changing routes.
    */
-  private destroyVisibleComponents() {
-    this.renderer.components.forEach(({ visible }, component) => {
-      if (!visible) return;
+  private destroyComponents() {
+    const components = this.routeComponents();
 
+    for (const component of components) {
       component.destroy?.(this.context);
-      this.renderer.components.get(component).visible = false;
+    }
+
+    this.renderer.visibleHashes.clear();
+  }
+
+  /**
+   * @description
+   * Starts all visible components in the renderer that are visible.
+   * This function prepares and hydrates all components that are currently visible in the route.
+   * It is called after rendering a new route to ensure that all components are ready for interaction.
+   */
+  private startComponents() {
+    const components = this.routeComponents();
+
+    for (const component of components) {
+      component.prepare?.(this.context);
+      component.hydrate?.(this.context);
+    }
+  }
+
+  /**
+   * @description
+   * Returns an array of all components that are currently visible in the route.
+   * This function iterates through the renderer's allComponents map and collects
+   * components that are marked as visible. It is used to manage the lifecycle of components
+   * when rendering a new route.
+   *
+   * @returns {Newstack[]} An array of visible Newstack components.
+   */
+  private routeComponents() {
+    const components: Newstack[] = [];
+
+    this.renderer.components.forEach(({ component }, hash) => {
+      if (hash === (this.app.constructor as typeof Newstack).hash) {
+        // Skip the entrypoint component
+        return;
+      }
+
+      if (!this.renderer.visibleHashes.has(hash)) return;
+
+      components.push(component);
     });
+
+    return components;
   }
 }

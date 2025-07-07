@@ -1,8 +1,4 @@
-import {
-  Newstack,
-  type NewstackClientContext,
-  type NewstackServerContext,
-} from "./core";
+import { Newstack, type NewstackClientContext } from "./core";
 
 type VNode = {
   type: string | Function;
@@ -10,7 +6,6 @@ type VNode = {
     route?: string;
     children?: VNode | VNode[];
   };
-  children?: VNode[];
 };
 
 export class Renderer {
@@ -25,10 +20,17 @@ export class Renderer {
 
   /**
    * @description
-   * A set of components that have been rendered or are being rendered.
-   * This is used to keep track of components for hydration and other purposes.
+   * A set of all Newstack components that have been defined in the application.
+   * This includes components that have not yet been rendered.
    */
-  components: Map<Newstack, { visible: boolean }>;
+  components: Map<string, { component: Newstack; reinitiate: () => Newstack }>;
+
+  /**
+   * @description
+   * A set of hashes representing the components that are currently visible in the application.
+   * This is used to track which components should be rendered based on the current route.
+   */
+  visibleHashes: Set<string> = new Set();
 
   /**
    * @description
@@ -36,11 +38,16 @@ export class Renderer {
    * This is used to update the DOM when component properties change.
    */
   componentElements: Map<string, Element>;
+  lastVNode: any;
 
   constructor(context: NewstackClientContext = {} as NewstackClientContext) {
     this.context = context;
     this.components = new Map();
     this.componentElements = new Map();
+  }
+
+  get hashes(): string[] {
+    return Array.from(this.components.keys());
   }
 
   /**
@@ -53,7 +60,7 @@ export class Renderer {
    * @returns The Newstack component if found, otherwise null.
    */
   findComponentByHash(hash: string): Newstack {
-    for (const c of this.components.keys()) {
+    for (const [_, { component: c }] of this.components) {
       const component = c.constructor as typeof Newstack<{ hash: string }>;
       if (!component) continue;
 
@@ -85,17 +92,23 @@ export class Renderer {
       const matchAll = props.route === "*";
       const matchPath = matchRoute(props.route, this.context);
 
-      if (!matchAll && !matchPath) return "";
+      if (!matchAll && !matchPath) {
+        // Skip with an HTML comment for context router.path changing
+        return "<!---->";
+      }
     }
 
-    // Rendering Newstack components
-    const isComponent =
-      type && typeof type === "function" && type.prototype instanceof Newstack;
-    if (isComponent) {
-      const component = proxify(new (type as any)(), this);
-      this.components.set(component, { visible: true });
+    const isComponent = isComponentNode(node);
 
-      const isRenderable = typeof component.render === "function";
+    // Rendering Newstack components
+    if (isComponent) {
+      const { hash } = type as unknown as { hash: string };
+      const component = this.components.get(hash).reinitiate();
+
+      this.visibleHashes.add(hash);
+
+      const isRenderable = isRenderableComponent(component);
+
       if (isRenderable) {
         const vnode = component.render?.(this.context);
         if (typeof document !== "undefined") {
@@ -128,6 +141,34 @@ export class Renderer {
 
   /**
    * @description
+   * Patches an existing route in the DOM with a new virtual node.
+   * This function updates the HTML of the container element with the new virtual node,
+   * replacing the old content while preserving the structure and attributes of the existing elements.
+   *
+   * @param newVNode The new virtual node to render.
+   * @param container The HTML element where the new virtual node should be rendered.
+   */
+  patchRoute(newVNode: VNode, container: Element) {
+    if (!this.lastVNode) {
+      container.innerHTML = this.html(newVNode);
+      this.lastVNode = newVNode;
+      return;
+    }
+
+    const temp = document.createElement("div");
+    temp.innerHTML = this.html(newVNode);
+    const newEl = temp.firstElementChild;
+    const oldEl = container.firstElementChild;
+
+    if (newEl && oldEl) {
+      patchElement(oldEl, newEl, newVNode, () => {});
+    }
+
+    this.lastVNode = newVNode;
+  }
+
+  /**
+   * @description
    * Updates a Newstack component in the DOM.
    * This function finds the HTML element associated with the component,
    * renders the component to a new HTML string, and then patches the existing
@@ -155,6 +196,88 @@ export class Renderer {
     patchElement(container, newEl, vnode, () =>
       this.updateComponent(component),
     );
+  }
+
+  /**
+   * @description
+   * Sets up all components in the application, including the entrypoint component and its children.
+   * This function initializes the components, creates proxies for them to ensure reactivity,
+   * and recursively processes child components to add them to the renderer's component list.
+   *
+   * @param entrypoint The main entrypoint component of the application.
+   * @param context The context object that holds the current state of the application.
+   */
+  setupAllComponents(entrypoint: Newstack) {
+    /**
+     * Sets up the entrypoint component as part of the renderer's components.
+     */
+    const setupEntrypoint = () => {
+      const entrypointHash = (entrypoint.constructor as typeof Newstack).hash;
+      const reinitiate = () => {
+        const component = proxify(new (entrypoint.constructor as any)(), this);
+        this.components.get(entrypointHash).component = component;
+        return component;
+      };
+
+      this.components.set(entrypointHash, {
+        component: proxify(entrypoint, this),
+        reinitiate,
+      });
+    };
+
+    /**
+     * Sets up all child components recursively from a given virtual node.
+     * This function traverses the virtual node tree, identifies Newstack components,
+     * and adds them to the renderer's components map. It also handles the creation
+     * of proxies for each component to ensure reactivity.
+     *
+     * @param vnode The virtual node to start processing from.
+     */
+    const setupChildrenRecursively = (vnode: VNode) => {
+      const loop = (node: VNode) => {
+        if (!node) return;
+        if (typeof node !== "object") return;
+
+        const { type, props } = node;
+
+        if (isComponentNode(node)) {
+          const hash = (type as unknown as { hash: string }).hash;
+          const createComponent = () => proxify(new (type as any)(), this);
+          const component = createComponent();
+          const reinitiate = () => {
+            const c = createComponent();
+            this.components.get(hash).component = createComponent();
+            return c;
+          };
+
+          this.components.set(hash, { component, reinitiate });
+
+          if (isRenderableComponent(component))
+            loop(component.render(this.context));
+        }
+
+        if (Array.isArray(props?.children)) {
+          for (const child of props.children) {
+            loop(child);
+          }
+
+          return;
+        }
+
+        loop(props.children);
+      };
+
+      loop(vnode);
+    };
+
+    // Adding the entrypoint component to the components list
+    setupEntrypoint();
+    if (!isRenderableComponent(entrypoint)) return;
+
+    const vnode = entrypoint.render(this.context);
+
+    // Adding entrypoint children components to the components list
+    setupChildrenRecursively(vnode);
   }
 }
 
@@ -292,8 +415,8 @@ function matchRoute(
   routePattern: string,
   context: NewstackClientContext,
 ): boolean {
-  const routeSegments = routePattern.split("/").filter(Boolean);
-  const pathSegments = context.router.path.split("/").filter(Boolean);
+  const routeSegments = routePattern?.split("/").filter(Boolean) ?? [];
+  const pathSegments = context.router.path?.split("/").filter(Boolean) ?? [];
 
   if (routeSegments.length !== pathSegments.length) return false;
 
@@ -314,4 +437,14 @@ function matchRoute(
   });
 
   return true;
+}
+
+function isComponentNode(node: VNode): boolean {
+  return (
+    typeof node.type === "function" && node.type.prototype instanceof Newstack
+  );
+}
+
+function isRenderableComponent(c: Newstack): boolean {
+  return c.render && typeof c.render === "function";
 }
