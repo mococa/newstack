@@ -33,6 +33,7 @@ export interface NewstackEnvironment {
 export interface NewstackParams extends Record<string, string | boolean> {}
 export interface NewstackSettings extends Record<string, string | boolean> {}
 export interface NewstackSecrets extends Record<string, string | boolean> {}
+export interface NewstackDependencies extends Record<string, any> {}
 
 // biome-ignore lint/suspicious/noEmptyInterface:
 export interface NewstackWorker {}
@@ -113,6 +114,11 @@ export type NewstackServerContext<T = unknown> = NewstackCommonContext & {
    * Map of secrets that are not exposed to the client.
    */
   secrets: NewstackSecrets;
+
+  /**
+   * Map of dependencies that can be used in the application.
+   */
+  deps: NewstackDependencies;
 } & T;
 
 export abstract class NewstackComponent<T> {

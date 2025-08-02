@@ -91,6 +91,7 @@ export class NewstackServer {
 
   constructor() {
     this.server = new Hono();
+    context.deps = {};
 
     this.renderer = new Renderer(context as NewstackClientContext);
     this.setupRoutes();
@@ -123,7 +124,7 @@ export class NewstackServer {
   private async executeServerFunction(
     hash: string,
     method: string,
-    args: unknown,
+    args: Record<string, unknown>,
   ): Promise<ServerFunctionResponse> {
     const component = this.renderer.findComponentByHash(hash);
     if (!component) {
@@ -131,7 +132,10 @@ export class NewstackServer {
     }
 
     try {
-      const result = await component.constructor[method](args);
+      const result = await component.constructor[method]({
+        ...args,
+        ...context,
+      });
 
       return { result, error: null };
     } catch (error) {
@@ -232,8 +236,17 @@ export class NewstackServer {
   private async template(): Promise<string> {
     this.renderer.visibleHashes.clear();
     const element = this.app.render(context as NewstackClientContext);
-    const page = this.renderer.html(element);
+    this.renderer.html(element);
     await this.prepare();
+    const page = this.renderer.html(element);
+
+    const registrySnapshot = JSON.stringify(
+      Object.fromEntries(
+        Array.from(this.renderer.components.entries())
+          .filter(([hash]) => this.renderer.visibleHashes.has(hash))
+          .map(([hash, { component }]) => [hash, { state: component }]),
+      ),
+    );
 
     return `
       <!DOCTYPE html>
@@ -253,6 +266,7 @@ export class NewstackServer {
             </style>
 
       	    <script type="module" src="/client.js?fingerprint=${hash}"></script>
+            <script id="__NEWSTACK_STATE__" type="application/json">${registrySnapshot}</script>
         </head>
 
         <body>
@@ -269,8 +283,9 @@ export class NewstackServer {
    *
    * @returns {Hono}
    */
-  start(app: Newstack): Hono {
+  start(app: Newstack, opts: { deps: Record<string, any> }): Hono {
     this.app = app;
+    context.deps = opts.deps;
     this.serveAppRoutes();
     this.renderer.setupAllComponents(this.app);
 

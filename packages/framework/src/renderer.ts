@@ -103,7 +103,22 @@ export class Renderer {
     // Rendering Newstack components
     if (isComponent) {
       const { hash } = type as unknown as { hash: string };
-      const component = this.components.get(hash).reinitiate();
+      let { component, reinitiate } = this.components.get(hash);
+      if (this.context.environment === "client") {
+        component = reinitiate();
+
+        if (!this.lastVNode) {
+          // First render in the client
+          const snapshots = document.querySelector<HTMLScriptElement>(
+            "script#__NEWSTACK_STATE__",
+          );
+
+          if (snapshots) {
+            const states = JSON.parse(snapshots.textContent || "{}");
+            this.addSnapshotStateData(component, states);
+          }
+        }
+      }
 
       this.visibleHashes.add(hash);
 
@@ -111,10 +126,8 @@ export class Renderer {
 
       if (isRenderable) {
         const vnode = component.render?.(this.context);
-        if (typeof document !== "undefined") {
-          vnode.props["data-newstack"] = (
-            type as unknown as { hash: string }
-          ).hash;
+        if (this.context.environment === "client") {
+          vnode.props["data-newstack"] = hash;
         }
 
         const node = this.html(vnode);
@@ -137,6 +150,29 @@ export class Renderer {
       .join("");
 
     return `<${type}${attrs}>${children}</${type}>`;
+  }
+
+  /**
+   * @description
+   * Adds state data from a snapshot to a Newstack component.
+   * This function retrieves the state from the provided states object using the component's hash
+   * and assigns the state properties to the component instance.
+   *
+   * @param component The Newstack component to which the state data should be added.
+   * @param states An object containing state data indexed by component hashes.
+   */
+  addSnapshotStateData(
+    component: Newstack,
+    states: Record<string, { state: unknown }>,
+  ) {
+    const { hash } = component.constructor as typeof Newstack;
+    const { state } = states[hash];
+
+    if (!state) return;
+
+    for (const [key, value] of Object.entries(state)) {
+      this.components.get(hash).component[key] = value;
+    }
   }
 
   /**
@@ -252,8 +288,9 @@ export class Renderer {
 
           this.components.set(hash, { component, reinitiate });
 
-          if (isRenderableComponent(component))
+          if (isRenderableComponent(component)) {
             loop(component.render(this.context));
+          }
         }
 
         if (Array.isArray(props?.children)) {
@@ -261,6 +298,33 @@ export class Renderer {
             loop(child);
           }
 
+          return;
+        }
+
+        loop(props.children);
+      };
+
+      loop(vnode);
+    };
+
+    /**
+     * Goes through all the tree and sets up the default visible hashes.
+     */
+    const setupDefaultVisibleHashes = (vnode: VNode) => {
+      const loop = (node: VNode) => {
+        if (!node || typeof node !== "object") return;
+
+        const { type, props } = node;
+
+        if (isComponentNode(node)) {
+          const hash = (type as unknown as { hash: string }).hash;
+          this.visibleHashes.add(hash);
+        }
+
+        if (Array.isArray(props?.children)) {
+          for (const child of props.children) {
+            loop(child);
+          }
           return;
         }
 
@@ -278,6 +342,7 @@ export class Renderer {
 
     // Adding entrypoint children components to the components list
     setupChildrenRecursively(vnode);
+    setupDefaultVisibleHashes(vnode);
   }
 }
 
@@ -303,8 +368,10 @@ function proxify(component: Newstack, renderer: Renderer): Newstack {
       target[key] = value;
 
       // Automatically update the component when a property changes
+      // if (renderer.context.environment === "client") {
       renderer.updateComponent(target);
       target.update?.(renderer.context);
+      // }
 
       return true;
     },
