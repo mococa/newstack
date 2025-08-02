@@ -1,5 +1,5 @@
 import type { OnLoadArgs } from "esbuild";
-import * as crypto from "crypto";
+import crypto from "crypto";
 
 /**
  * @todo

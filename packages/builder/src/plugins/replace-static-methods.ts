@@ -36,11 +36,13 @@ export function ReplaceStaticMethods(args: OnLoadArgs, code: string): string {
 
 function replacer({ args, method, hash }) {
   return `
+        const body = ${args ?? "{}"};
+        delete body.deps; // Remove deps from the body if present
         const url = "/api/newstack/${hash}/${method}";
         const options = {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(${args}),
+            body: JSON.stringify(body),
         };
 
         const { result, error } = await fetch(url, options).then((res) => res.json());
